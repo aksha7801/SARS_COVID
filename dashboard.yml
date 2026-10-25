@@ -1,0 +1,307 @@
+schema_version: 2
+dashboard:
+  title: Reported COVID-19 deaths versus estimated excess deaths, 2020-2021
+  subject: sars_cov_2
+  question: How closely do the COVID-19 deaths that countries reported to the World Health
+    Organization track WHO's modelled estimate of excess deaths in 2020 and 2021, and
+    where do the two diverge most?
+  audience: Public-health analysts and policy advisers who need to judge where official
+    COVID-19 death counts understate, or roughly match, the pandemic's total mortality
+    impact
+  entrypoint: app.py
+  pages: []
+  sample_environment_variable: DASHBOARD_SAMPLE_MODE
+sources:
+- id: who_weekly_deaths
+  publisher: World Health Organization
+  title: 'WHO COVID-19 dashboard: Weekly COVID-19 cases and deaths by date reported to WHO'
+  url: https://srhdpeuwpubsa.blob.core.windows.net/whdh/COVID/WHO-COVID-19-global-data.csv
+  licence: Creative Commons Attribution 4.0 International (CC BY 4.0), with WHO's additional
+    terms stated on https://data.who.int/dashboards/covid19/data
+  retrieved: '2026-10-25'
+  cadence: Updated weekly by WHO, with retrospective corrections to earlier weeks
+  status: snapshot
+  notes: Weekly file as downloaded, kept unmodified in data/raw/. Only weeks ending
+    January 2020 to December 2021 are used. Page https://data.who.int/dashboards/covid19/data.
+- id: who_excess_deaths
+  publisher: World Health Organization
+  title: 'WHO Estimates of Excess Mortality Associated with COVID-19 Pandemic (as of
+    5 April 2023): Estimates by country'
+  url: https://www.who.int/data/sets/global-excess-deaths-associated-with-covid-19-modelled-estimates
+  licence: WHO copyright notice in the workbook, which states that permission from WHO
+    is not required to use data available for download; WHO endorsement must not be
+    stated or implied
+  retrieved: '2026-10-25'
+  cadence: Single release (May 2023); not updated
+  status: archive
+  notes: Workbook WHO_COVID_Excess_Deaths_EstimatesByCountry.xlsx, sheet 'Deaths by
+    year and month', downloaded by hand and kept unmodified in data/raw/. Covers January
+    2020 to December 2021, 194 countries.
+datasets:
+- id: excess_vs_reported
+  source_ids:
+  - who_weekly_deaths
+  - who_excess_deaths
+  sample: data/sample.csv
+  processed_output: data/processed.csv
+  format: csv
+  date_column: date
+  primary_key:
+  - date
+  - country_code
+  minimum_rows: 300
+  latest_observation: '2021-12-31'
+  columns:
+    date:
+      type: date
+      role: time
+      nullable: false
+      date_minimum: '2020-01-31'
+      date_maximum: '2021-12-31'
+    country_code:
+      type: string
+      role: geography
+      nullable: false
+    country:
+      type: string
+      role: geography
+      nullable: false
+    who_region:
+      type: string
+      role: geography
+      nullable: false
+      allowed_values:
+      - AFRO
+      - AMRO
+      - EMRO
+      - EURO
+      - SEARO
+      - WPRO
+    estimate_type:
+      type: string
+      role: dimension
+      nullable: false
+      allowed_values:
+      - reported
+      - predicted
+    reported_deaths:
+      type: integer
+      role: measure
+      nullable: false
+      unit: deaths
+      minimum: 0
+      maximum: 5000000
+    cumulative_reported_deaths:
+      type: integer
+      role: measure
+      nullable: false
+      unit: deaths
+      minimum: 0
+      maximum: 20000000
+    expected_deaths:
+      type: number
+      role: measure
+      nullable: false
+      unit: deaths
+      minimum: 0
+      maximum: 5000000
+    all_cause_deaths:
+      type: number
+      role: measure
+      nullable: false
+      unit: deaths
+      minimum: 0
+      maximum: 5000000
+    excess_deaths:
+      type: number
+      role: measure
+      nullable: false
+      unit: deaths
+      minimum: -5000000
+      maximum: 10000000
+    cumulative_excess_deaths:
+      type: number
+      role: measure
+      nullable: false
+      unit: deaths
+      minimum: -5000000
+      maximum: 20000000
+    cumulative_excess_low:
+      type: number
+      role: measure
+      nullable: false
+      unit: deaths
+      minimum: -10000000
+      maximum: 20000000
+    cumulative_excess_high:
+      type: number
+      role: measure
+      nullable: false
+      unit: deaths
+      minimum: -5000000
+      maximum: 30000000
+views:
+- id: tracking_overview
+  dataset_id: excess_vs_reported
+  page: app.py
+  title: How closely do reported deaths track estimated excess deaths?
+  unit: deaths (count of people)
+  source_ids:
+  - who_weekly_deaths
+  - who_excess_deaths
+  controls:
+  - key: tracking_regions
+    type: multiselect
+    label: WHO regions
+    default_value:
+    - AFRO
+    - AMRO
+    - EMRO
+    - EURO
+    - SEARO
+    - WPRO
+    test_value:
+    - EURO
+    expected_text: 'Selected regions: EURO'
+    empty_test_value: []
+    empty_expected_text: No observations match the selected filters.
+    filter:
+      column: who_region
+      operator: isin
+  - key: tracking_period
+    type: slider
+    label: Months to include (month-end dates)
+    default_value:
+    - '2020-01-31'
+    - '2021-12-31'
+    test_value:
+    - '2020-01-31'
+    - '2020-12-31'
+    filter:
+      column: date
+      operator: range
+  outputs:
+  - chart
+  - metric
+  - download
+- id: divergence_ranking
+  dataset_id: excess_vs_reported
+  page: app.py
+  title: Where do reported deaths and estimated excess deaths diverge most?
+  unit: deaths (count of people) or ratio
+  source_ids:
+  - who_weekly_deaths
+  - who_excess_deaths
+  controls:
+  - key: ranking_regions
+    type: multiselect
+    label: WHO regions to rank
+    default_value:
+    - AFRO
+    - AMRO
+    - EMRO
+    - EURO
+    - SEARO
+    - WPRO
+    test_value:
+    - AFRO
+    empty_test_value: []
+    empty_expected_text: No observations match the selected filters.
+    filter:
+      column: who_region
+      operator: isin
+  - key: rank_measure
+    type: selectbox
+    label: Rank countries by
+    default_value: Excess / reported (ratio)
+    test_value: Excess - reported (deaths)
+  - key: min_reported
+    type: number_input
+    label: Minimum reported deaths for a ratio
+    default_value: 1000
+    test_value: 20000
+  - key: top_n
+    type: slider
+    label: Countries to show
+    default_value: 10
+    test_value: 5
+  outputs:
+  - chart
+  - table
+  - download
+- id: country_timeline
+  dataset_id: excess_vs_reported
+  page: app.py
+  title: When did reported deaths and estimated excess deaths diverge?
+  unit: deaths per month, or running total of deaths
+  source_ids:
+  - who_weekly_deaths
+  - who_excess_deaths
+  controls:
+  - key: timeline_countries
+    type: multiselect
+    label: Countries (up to 6)
+    default_value:
+    - India
+    test_value:
+    - Brazil
+    empty_test_value: []
+    empty_expected_text: No observations match the selected filters.
+    filter:
+      column: country
+      operator: isin
+  - key: timeline_measure
+    type: radio
+    label: Show
+    default_value: Monthly deaths
+    test_value: Running total since Jan 2020 (with WHO 95% interval)
+  - key: timeline_period
+    type: slider
+    label: Months to include (month-end dates)
+    default_value:
+    - '2020-01-31'
+    - '2021-12-31'
+    test_value:
+    - '2020-01-31'
+    - '2020-12-31'
+    filter:
+      column: date
+      operator: range
+  outputs:
+  - chart
+  - metric
+  - download
+pipeline:
+  acquisition_method: script
+  acquisition_path: src/data.py
+  transform_command:
+  - python
+  - -m
+  - src.data
+  download_declared: true
+  download_label: Download filtered data
+  date_label: Latest observation
+topic_integrity:
+  outcome_definition: 'Reported deaths are COVID-19 deaths that national authorities
+    reported to WHO (definitions vary by country). Excess deaths are WHO''s modelled
+    estimate of all-cause deaths above the number expected without the pandemic, covering
+    deaths associated with the pandemic directly or indirectly, with deaths from other
+    shocks such as conflict and natural disasters removed. Excess deaths are not a
+    count of COVID-19 deaths.'
+  date_basis: 'Reported deaths use the WHO week-ending date (Sunday), allocated to
+    the month in which the week ends; the last week counted is the week ending 2021-12-26.
+    Excess deaths use the calendar month of death. Monthly rows are dated with the
+    month-end date.'
+  surveillance_status: 'Reported deaths: weekly national passive reporting to WHO, with
+    retrospective revisions; this snapshot is a fixed copy. Excess deaths: a single
+    frozen WHO modelled release (as of 5 April 2023), not updated since; months marked
+    predicted use modelled all-cause deaths.'
+  coverage_limitations: 'Covers 194 countries, January 2020 to December 2021 only (the
+    span of WHO''s excess estimates). Not adjusted for population size or age structure.
+    Reporting completeness, testing and death-certificate coding differ by country,
+    so the gap between the series mixes under-reporting, indirect deaths and model
+    uncertainty. Offline sample covers 16 countries.'
+  testing_and_reporting_caveat: 'Reported deaths depend on testing capacity, national
+    case definitions and reporting delays or batch corrections. WHO may revise earlier
+    weeks. Some countries reported no deaths in some weeks, which is not the same as
+    zero deaths.'
